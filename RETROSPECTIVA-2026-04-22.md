@@ -168,6 +168,89 @@ La página `/recordings` requiere `export const dynamic = 'force-dynamic'` para 
 | `/recordings` aparecía como `○ (Static)` en el build | Añadir `export const dynamic = 'force-dynamic'` al server component |
 | Next.js 16: params en Route Handlers son Promises | Usar `const { id } = await params` en lugar de acceso directo |
 | Rustfs: `ERR_CONTENT_LENGTH_MISMATCH 206` en reproducción | Implementar proxy `/api/stream/[id]` con HeadObject + Range request |
+| `failed to pipe response` / `ERR_EMPTY_RESPONSE` al abrir `/recordings` | Ver sección de debugging post-sesión más abajo |
+
+---
+
+## Debugging post-sesión — ECONNRESET en `/api/stream/[id]` (2026-05-31)
+
+### Síntoma
+Al abrir `http://localhost:3000/recordings` el servidor lanzaba inmediatamente:
+```
+⨯ Error: failed to pipe response  [cause]: Error: aborted  code: 'ECONNRESET'
+```
+Y el navegador reportaba `ERR_EMPTY_RESPONSE` en la consola. El video no cargaba.
+
+### Diagnóstico — tres causas raíz
+
+**Causa 1 — `transformToWebStream()` en el path sin Range header**
+
+El proxy original usaba `GetObjectCommand` + `body.transformToWebStream()` para el stream completo (petición sin `Range` header). El navegador siempre hace una petición inicial sin `Range` como sonda. RustFS cerraba la conexión TCP a mitad del stream, Next.js intentaba hacer pipe de un stream ya roto y lanzaba `failed to pipe response` antes de enviar ningún header al navegador → `ERR_EMPTY_RESPONSE`.
+
+**Causa 2 — Bug interno de RustFS con Range requests**
+
+RustFS tiene un bug por fichero: los Range requests donde `start >= un boundary interno` devuelven HTTP 206 con `Content-Length` correcto pero cierran el body antes de enviar datos. Con `fetch()` (undici) esto se manifiesta como excepción `terminated` al leer `resp.arrayBuffer()`. El boundary **no es fijo** — varía por fichero (confirmado: 1.5 MB para un webm de 3.5 MB, 1 MB para otros ficheros).
+
+Comportamiento confirmado con curl y presigned URLs:
+```
+bytes=0-524287        → 206, 524288 bytes  ✓
+bytes=524288-1048575  → 206, 524288 bytes  ✓
+bytes=1048576-1572863 → 206, 524288 bytes  ✓
+bytes=1572864-2097151 → 206, Content-Length: 524288, body: 0 bytes  ✗  (boundary)
+```
+
+**Causa 3 — `keepAlive: true` en el S3Client**
+
+RustFS cierra el socket TCP tras cada respuesta pero no envía `Connection: close`. El AWS SDK reutilizaba el socket cerrado para la siguiente petición → ECONNRESET en operaciones como `HeadObjectCommand`. Documentado en el proyecto hermano `upload-videos`.
+
+### Proceso de diagnóstico
+
+1. Se verificó que el error ocurría en la petición sin `Range` (sonda inicial del `<video>`), no solo en rangos altos.
+2. Se descartó problema de lógica en el código con un script Node.js que replicó la lógica exacta del route y pasó todos los tests.
+3. Se confirmó que el hot-reload de Next.js dev **no estaba aplicando los cambios** al route — los tests seguían mostrando el boundary exacto del bug de RustFS aunque el archivo en disco era correcto. **Solución:** reinicio del servidor.
+4. Se consultó la implementación funcionando del proyecto `1-4-90-upload-videos` que había resuelto el mismo problema.
+
+### Solución implementada
+
+**`lib/s3.ts`** — S3Client con `keepAlive: false`:
+```typescript
+import { NodeHttpHandler } from '@smithy/node-http-handler'
+import { Agent as HttpAgent } from 'http'
+
+export const s3 = new S3Client({
+  // ...
+  requestChecksumCalculation: 'WHEN_REQUIRED',
+  responseChecksumValidation: 'WHEN_REQUIRED',
+  requestHandler: new NodeHttpHandler({
+    httpAgent: new HttpAgent({ keepAlive: false }),
+    httpsAgent: new HttpsAgent({ keepAlive: false }),
+  }),
+})
+```
+
+**`app/api/stream/[id]/route.ts`** — Estrategia de caché con detección dinámica de boundary:
+1. Se genera una presigned URL una vez por request.
+2. Se intenta un range fetch normal (`fetch(presignedUrl, { headers: { Range } })`).
+3. Si lanza `terminated` o devuelve body vacío → se descarga el fichero completo con la **misma** presigned URL (sin `Range` — siempre funciona) y se guarda en un `Map<string, Uint8Array>` a nivel de módulo.
+4. Todos los chunks posteriores se sirven con `.subarray()` desde caché — cero peticiones extra a RustFS.
+5. Siempre devuelve HTTP 206 (incluyendo la sonda inicial sin `Range`, tratada como `start=0`).
+6. La respuesta usa `Uint8Array` directamente como `BodyInit` (no `Buffer.from()`) para evitar incompatibilidades con el pipe de Next.js.
+
+### Tests de validación (tras reinicio del servidor)
+
+| Test | Recording 1 (3.5 MB) | Recording 2 (403 KB) |
+|------|----------------------|----------------------|
+| plain GET | ✓ 200, 3,533,129 B | ✓ 200, 403,222 B |
+| bytes=0-524287 | ✓ 206, 524,288 B | ✓ 206, 403,222 B |
+| bytes=524288-1048575 | ✓ 206, 524,288 B | — |
+| bytes=1048576-1572863 | ✓ 206, 524,288 B | — |
+| bytes=1572864-2097151 *(era boundary)* | ✓ 206, 524,288 B | — |
+| bytes=2097152-2621439 | ✓ 206, 524,288 B | — |
+| bytes=3000000-end | ✓ 206, 524,288 B | — |
+| seek bytes=1000000- | ✓ 206, 524,288 B | ✓ 206, 303,222 B |
+| bytes=200000-403221 | — | ✓ 206, 203,222 B |
+
+12/12 tests pasados.
 
 ---
 
@@ -178,9 +261,13 @@ La página `/recordings` requiere `export const dynamic = 'force-dynamic'` para 
 - Proxy de video con soporte Range requests (seek funciona en el player)
 - Diseño "Deep Space Terminal" con animación de grabación pulsante
 - Bucket de Rustfs se auto-crea si no existe (con política pública de lectura)
+- Streaming de video robusto contra el bug de boundary de RustFS
 
 **A tener en cuenta para próximas sesiones:**
 - En Next.js 16, los `params` en Route Handlers **siempre son Promises** — `await params` es obligatorio
 - La versión de MongoDB driver es `^7.x` — el API es ligeramente diferente a `^6.x`
 - Rustfs requiere `forcePathStyle: true` en el S3Client (igual que MinIO)
-- El bucket `recordings` necesita política pública solo si se quiere acceso directo (el proxy lo hace innecesario para reproducción, pero puede ser útil para otras operaciones)
+- **RustFS + AWS SDK:** usar siempre `keepAlive: false` en el `NodeHttpHandler` — RustFS cierra sockets sin avisar
+- **RustFS + Range requests:** el boundary interno varía por fichero; usar detección dinámica con fallback a descarga completa y caché en memoria
+- **Next.js dev hot-reload:** los cambios en API routes a veces no se aplican sin reiniciar el servidor (`Ctrl+C` + `npm run dev`)
+- **`transformToWebStream()`:** evitar para respuestas donde RustFS puede cerrar el stream — mejor buffering completo en memoria para ficheros pequeños/medianos
