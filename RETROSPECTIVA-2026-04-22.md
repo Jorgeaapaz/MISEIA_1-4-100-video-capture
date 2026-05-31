@@ -3,7 +3,7 @@
 
 ## Resumen / Overview
 
-Implementación completa de una aplicación de captura de pantalla usando Next.js 16.2.4 (App Router), TypeScript, AWS SDK v3 (@aws-sdk/client-s3), MongoDB y Rustfs. La sesión partió de un proyecto Next.js vacío con el plan ya definido en `C:\Users\jorge\.claude\plans\dreamy-crunching-bear.md`. Al terminar, la app compila limpia con `npm run build` y todos los endpoints funcionan correctamente.
+Implementación completa de una aplicación de captura de pantalla usando Next.js 16.2.4 (App Router), TypeScript, AWS SDK v3 (@aws-sdk/client-s3), MongoDB y Rustfs. La sesión partió de un proyecto Next.js vacío. Al terminar, la app compila limpia con `npm run build` y todos los endpoints funcionan correctamente.
 
 **Resultado:** Exitoso. Build limpio, todas las rutas correctas.
 
