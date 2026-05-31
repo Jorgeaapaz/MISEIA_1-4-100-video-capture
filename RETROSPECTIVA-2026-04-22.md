@@ -115,9 +115,9 @@ npm run start
 | `http://localhost:3000/api/recordings` | API: GET lista de grabaciones (JSON) |
 | `http://localhost:3000/api/stream/{id}` | Proxy de video con soporte Range requests |
 | `http://localhost:3000/api/upload` | API: POST subida de video (FormData) |
-| http://localhost:10000 | RustFS (Running in Local PC Docker)|
-| http://localhost:10001 | RustFS Console (Running in Local PC Docker)|
-| http://localhost:27017 | MongoDB (Running in Local PC)|
+| `http://localhost:10000` | RustFS (Running in Local PC Docker)|
+| `http://localhost:10001` | RustFS Console (Running in Local PC Docker)|
+| `http://localhost:27017` | MongoDB (Running in Local PC)|
 
 ### Curl de prueba — listar grabaciones
 ```bash
