@@ -1,26 +1,22 @@
 import { MongoClient, Db } from 'mongodb'
 
-const uri = process.env.MONGODB_URI!
-const dbName = process.env.MONGODB_DB!
-
 declare global {
   var _mongoClientPromise: Promise<MongoClient> | undefined
 }
 
-let clientPromise: Promise<MongoClient>
-
-if (process.env.NODE_ENV === 'development') {
-  if (!global._mongoClientPromise) {
-    global._mongoClientPromise = new MongoClient(uri).connect()
+// Deferred: only called at request time, not at module evaluation (build-safe)
+function getClientPromise(): Promise<MongoClient> {
+  const uri = process.env.MONGODB_URI!
+  if (process.env.NODE_ENV === 'development') {
+    if (!global._mongoClientPromise) {
+      global._mongoClientPromise = new MongoClient(uri).connect()
+    }
+    return global._mongoClientPromise
   }
-  clientPromise = global._mongoClientPromise
-} else {
-  clientPromise = new MongoClient(uri).connect()
+  return new MongoClient(uri).connect()
 }
 
-export { clientPromise }
-
 export async function getDb(): Promise<Db> {
-  const client = await clientPromise
-  return client.db(dbName)
+  const client = await getClientPromise()
+  return client.db(process.env.MONGODB_DB!)
 }
