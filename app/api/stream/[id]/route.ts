@@ -49,21 +49,25 @@ export async function GET(
       step = `get-range:${start}-${cappedEnd}`
       let raw: Uint8Array | null = null
 
-      try {
-        const resp = await getS3Client().send(
-          new GetObjectCommand({
-            Bucket: bucket,
-            Key: s3Key,
-            Range: `bytes=${start}-${cappedEnd}`,
-          })
-        )
-        if (resp.Body) {
-          raw = await (resp.Body as { transformToByteArray: () => Promise<Uint8Array> }).transformToByteArray()
-          if (raw.byteLength === 0) raw = null
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const resp = await getS3Client().send(
+            new GetObjectCommand({
+              Bucket: bucket,
+              Key: s3Key,
+              Range: `bytes=${start}-${cappedEnd}`,
+            })
+          )
+          if (resp.Body) {
+            raw = await (resp.Body as { transformToByteArray: () => Promise<Uint8Array> }).transformToByteArray()
+            if (raw.byteLength === 0) raw = null
+          }
+        } catch (rangeErr) {
+          console.warn(`[stream] range GET attempt ${attempt + 1} failed (${s3Key}):`, rangeErr instanceof Error ? rangeErr.message : rangeErr)
+          raw = null
         }
-      } catch (rangeErr) {
-        console.warn(`[stream] range GET failed (${s3Key}):`, rangeErr instanceof Error ? rangeErr.message : rangeErr)
-        raw = null
+        if (raw !== null) break
+        if (attempt === 0) await new Promise<void>(r => setTimeout(r, 500))
       }
 
       if (!raw) {

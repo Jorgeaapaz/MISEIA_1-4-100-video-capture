@@ -24,9 +24,14 @@ function makeBody(bytes: Uint8Array) {
 
 describe('GET /api/stream/[id]', () => {
   beforeEach(() => {
+    vi.useFakeTimers()
     vi.resetModules()
     mockSend.mockReset()
     mockGetDb.mockReset()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('returns 404 when recording is not found', async () => {
@@ -77,7 +82,9 @@ describe('GET /api/stream/[id]', () => {
       }),
     })
     mockSend.mockResolvedValueOnce({ ContentLength: 2048 })
-    // Range request returns empty body
+    // First range GET → empty (triggers retry after 500ms)
+    mockSend.mockResolvedValueOnce({ Body: makeBody(new Uint8Array(0)) })
+    // Second range GET (retry) → also empty
     mockSend.mockResolvedValueOnce({ Body: makeBody(new Uint8Array(0)) })
     // Full object GET
     const fullBuf = new Uint8Array(512).fill(0xcd)
@@ -87,7 +94,9 @@ describe('GET /api/stream/[id]', () => {
     const req = new NextRequest(`http://localhost/api/stream/${id}`, {
       headers: { Range: 'bytes=0-' },
     })
-    const res = await GET(req, { params: Promise.resolve({ id: id.toString() }) })
+    const resPromise = GET(req, { params: Promise.resolve({ id: id.toString() }) })
+    await vi.runAllTimersAsync()
+    const res = await resPromise
     expect(res.status).toBe(206)
   })
 

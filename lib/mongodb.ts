@@ -4,7 +4,8 @@ declare global {
   var _mongoClientPromise: Promise<MongoClient> | undefined
 }
 
-// Deferred: only called at request time, not at module evaluation (build-safe)
+let _clientPromise: Promise<MongoClient> | null = null
+
 function getClientPromise(): Promise<MongoClient> {
   const uri = process.env.MONGODB_URI!
   if (process.env.NODE_ENV === 'development') {
@@ -13,7 +14,10 @@ function getClientPromise(): Promise<MongoClient> {
     }
     return global._mongoClientPromise
   }
-  return new MongoClient(uri).connect()
+  if (!_clientPromise) {
+    _clientPromise = new MongoClient(uri).connect()
+  }
+  return _clientPromise
 }
 
 export async function getDb(): Promise<Db> {
