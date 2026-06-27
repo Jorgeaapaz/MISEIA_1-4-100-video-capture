@@ -45,13 +45,17 @@ describe('lib/mongodb', () => {
     expect(db).toBeDefined()
   })
 
-  it('clientPromise is a Promise', async () => {
+  it('getDb() can be called multiple times safely', async () => {
     process.env.MONGODB_URI = 'mongodb://localhost:27017'
     process.env.MONGODB_DB = 'test-db'
 
-    mockConnect.mockResolvedValue({ db: mockDb })
+    const fakeDb = { collection: vi.fn() }
+    mockConnect.mockResolvedValue({ db: () => fakeDb })
 
-    const { clientPromise } = await import('./mongodb')
-    expect(clientPromise).toBeInstanceOf(Promise)
+    const { getDb } = await import('./mongodb')
+    const db1 = await getDb()
+    const db2 = await getDb()
+    expect(db1).toBeDefined()
+    expect(db2).toBeDefined()
   })
 })
