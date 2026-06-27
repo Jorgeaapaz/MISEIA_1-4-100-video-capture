@@ -17,6 +17,7 @@ vi.mock('@aws-sdk/client-s3', () => ({
 
 function makeBody(bytes: Uint8Array) {
   return {
+    transformToByteArray: async () => bytes,
     [Symbol.asyncIterator]: async function* () { yield bytes },
   }
 }
