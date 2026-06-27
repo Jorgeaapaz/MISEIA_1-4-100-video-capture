@@ -33,9 +33,9 @@ describe('lib/s3', () => {
     mockSend.mockReset()
   })
 
-  it('exports an s3 client instance and bucket name', async () => {
-    const { s3, bucket } = await import('./s3')
-    expect(s3).toBeDefined()
+  it('exports a lazy s3 client getter and bucket name', async () => {
+    const { getS3Client, bucket } = await import('./s3')
+    expect(getS3Client()).toBeDefined()
     expect(bucket).toBe('test-bucket')
   })
 

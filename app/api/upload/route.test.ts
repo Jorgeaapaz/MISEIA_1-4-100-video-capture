@@ -9,7 +9,7 @@ vi.mock('@aws-sdk/client-s3', () => ({
 }))
 
 vi.mock('@/lib/s3', () => ({
-  s3: { send: mockSend },
+  getS3Client: () => ({ send: mockSend }),
   bucket: 'test-bucket',
   ensureBucket: mockEnsureBucket,
 }))

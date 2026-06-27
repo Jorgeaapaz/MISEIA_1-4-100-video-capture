@@ -9,9 +9,7 @@ const mockGetSignedUrl = vi.fn()
 
 vi.mock('@/lib/mongodb', () => ({ getDb: mockGetDb }))
 vi.mock('@/lib/s3', () => ({
-  s3: {
-    send(...args: unknown[]) { return mockSend(...args) },
-  },
+  getS3Client: () => ({ send: (...args: unknown[]) => mockSend(...args) }),
   bucket: 'test-bucket',
 }))
 vi.mock('@aws-sdk/client-s3', () => ({

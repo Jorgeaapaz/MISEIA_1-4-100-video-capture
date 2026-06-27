@@ -3,7 +3,7 @@ import { GetObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { ObjectId } from 'mongodb'
 import { getDb } from '@/lib/mongodb'
-import { s3, bucket } from '@/lib/s3'
+import { getS3Client, bucket } from '@/lib/s3'
 
 // RustFS bug: range requests that start at or after an internal chunk boundary
 // terminate the connection (or return 0 bytes) instead of serving data. The
@@ -36,7 +36,7 @@ export async function GET(
 
     const s3Key = recording.s3Key as string
 
-    const headResult = await s3.send(
+    const headResult = await getS3Client().send(
       new HeadObjectCommand({ Bucket: bucket, Key: s3Key })
     )
     const fileSize = headResult.ContentLength ?? 0
@@ -49,7 +49,7 @@ export async function GET(
     }
 
     const presignedUrl = await getSignedUrl(
-      s3,
+      getS3Client(),
       new GetObjectCommand({ Bucket: bucket, Key: s3Key }),
       { expiresIn: 300 }
     )
