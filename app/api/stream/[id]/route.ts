@@ -1,22 +1,25 @@
 import { NextRequest } from 'next/server'
 import { GetObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3'
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { ObjectId } from 'mongodb'
 import { getDb } from '@/lib/mongodb'
 import { getS3Client, bucket } from '@/lib/s3'
 
 // RustFS bug: range requests that start at or after an internal chunk boundary
-// terminate the connection (or return 0 bytes) instead of serving data. The
-// boundary offset varies per file. Full-object GET always works.
-//
-// Strategy:
-//  1. Try a capped range request using a presigned URL.
-//  2. If it throws (connection terminated) or returns an empty body, fall back:
-//     fetch the full object once with the same presigned URL and cache it.
-//  3. Subsequent requests for the same s3Key are served from the module cache.
+// terminate the connection (or return 0 bytes) instead of serving data.
+// keepAlive: false on the S3Client prevents ECONNRESET by using a fresh TCP
+// connection per request. If the range response is empty, fall back to a
+// full-object GET and cache it for subsequent range requests.
 const MAX_CHUNK = 512 * 1024
 
 const videoCache = new Map<string, Uint8Array>()
+
+async function toBuffer(body: unknown): Promise<Buffer> {
+  const chunks: Buffer[] = []
+  for await (const chunk of body as AsyncIterable<Uint8Array>) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+  }
+  return Buffer.concat(chunks)
+}
 
 export async function GET(
   request: NextRequest,
@@ -48,12 +51,6 @@ export async function GET(
       if (m) start = Number(m[1])
     }
 
-    const presignedUrl = await getSignedUrl(
-      getS3Client(),
-      new GetObjectCommand({ Bucket: bucket, Key: s3Key }),
-      { expiresIn: 300 }
-    )
-
     let buffer: Uint8Array
     let totalSize = fileSize
 
@@ -63,45 +60,40 @@ export async function GET(
       buffer = data.subarray(start, Math.min(start + MAX_CHUNK, data.byteLength))
     } else {
       const cappedEnd = Math.min(start + MAX_CHUNK - 1, fileSize - 1)
-
-      let needsCache = false
-      let raw: Uint8Array | null = null
-      let contentRange: string | null = null
+      let raw: Buffer | null = null
 
       try {
-        const resp = await fetch(presignedUrl, {
-          headers: { Range: `bytes=${start}-${cappedEnd}` },
-        })
-        if (!resp.ok && resp.status !== 206) {
-          throw new Error(`RustFS range fetch: ${resp.status}`)
+        const resp = await getS3Client().send(
+          new GetObjectCommand({
+            Bucket: bucket,
+            Key: s3Key,
+            Range: `bytes=${start}-${cappedEnd}`,
+          })
+        )
+        if (resp.Body) {
+          raw = await toBuffer(resp.Body)
+          if (raw.byteLength === 0) {
+            raw = null
+          } else if (resp.ContentRange) {
+            const m = resp.ContentRange.match(/\/(\d+)$/)
+            if (m) totalSize = Number(m[1])
+          }
         }
-        const bytes = new Uint8Array(await resp.arrayBuffer())
-        if (bytes.byteLength === 0) {
-          needsCache = true
-        } else {
-          raw = bytes
-          contentRange = resp.headers.get('content-range')
-        }
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e)
-        if (msg.startsWith('RustFS range fetch:')) throw e
-        // terminated / ECONNRESET → RustFS internal boundary hit
-        needsCache = true
+      } catch {
+        raw = null
       }
 
-      if (needsCache) {
-        const fullResp = await fetch(presignedUrl)
-        if (!fullResp.ok) throw new Error(`RustFS full-object fetch: ${fullResp.status}`)
-        videoCache.set(s3Key, new Uint8Array(await fullResp.arrayBuffer()))
-        const data = videoCache.get(s3Key)!
-        totalSize = data.byteLength
-        buffer = data.subarray(start, Math.min(start + MAX_CHUNK, data.byteLength))
+      if (!raw) {
+        const fullResp = await getS3Client().send(
+          new GetObjectCommand({ Bucket: bucket, Key: s3Key })
+        )
+        if (!fullResp.Body) throw new Error('Empty body from Rustfs full-object GET')
+        const fullBuf = await toBuffer(fullResp.Body)
+        videoCache.set(s3Key, new Uint8Array(fullBuf))
+        totalSize = fullBuf.byteLength
+        buffer = new Uint8Array(fullBuf).subarray(start, Math.min(start + MAX_CHUNK, fullBuf.byteLength))
       } else {
-        buffer = raw!
-        if (contentRange) {
-          const m = contentRange.match(/\/(\d+)$/)
-          if (m) totalSize = Number(m[1])
-        }
+        buffer = new Uint8Array(raw)
       }
     }
 

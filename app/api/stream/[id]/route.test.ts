@@ -4,8 +4,6 @@ import { ObjectId } from 'mongodb'
 
 const mockSend = vi.fn()
 const mockGetDb = vi.fn()
-const mockFetch = vi.fn()
-const mockGetSignedUrl = vi.fn()
 
 vi.mock('@/lib/mongodb', () => ({ getDb: mockGetDb }))
 vi.mock('@/lib/s3', () => ({
@@ -16,19 +14,18 @@ vi.mock('@aws-sdk/client-s3', () => ({
   GetObjectCommand: class GetObjectCommand { constructor(public args: unknown) {} },
   HeadObjectCommand: class HeadObjectCommand { constructor(public args: unknown) {} },
 }))
-vi.mock('@aws-sdk/s3-request-presigner', () => ({
-  getSignedUrl: (...args: unknown[]) => mockGetSignedUrl(...args),
-}))
 
-globalThis.fetch = mockFetch as unknown as typeof fetch
+function makeBody(bytes: Uint8Array) {
+  return {
+    [Symbol.asyncIterator]: async function* () { yield bytes },
+  }
+}
 
 describe('GET /api/stream/[id]', () => {
   beforeEach(() => {
     vi.resetModules()
     mockSend.mockReset()
     mockGetDb.mockReset()
-    mockFetch.mockReset()
-    mockGetSignedUrl.mockResolvedValue('https://presigned/video.webm')
   })
 
   it('returns 404 when recording is not found', async () => {
@@ -51,15 +48,13 @@ describe('GET /api/stream/[id]', () => {
         findOne: vi.fn().mockResolvedValueOnce(recording),
       }),
     })
-    // HeadObjectCommand
+    // HeadObjectCommand → ContentLength
     mockSend.mockResolvedValueOnce({ ContentLength: 1024 })
-
+    // GetObjectCommand with Range → partial body
     const fakeBytes = new Uint8Array(512).fill(0xab)
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      status: 206,
-      arrayBuffer: vi.fn().mockResolvedValue(fakeBytes.buffer),
-      headers: { get: vi.fn().mockReturnValue('bytes 0-511/1024') },
+    mockSend.mockResolvedValueOnce({
+      Body: makeBody(fakeBytes),
+      ContentRange: 'bytes 0-511/1024',
     })
 
     const { GET } = await import('./route')
@@ -72,7 +67,7 @@ describe('GET /api/stream/[id]', () => {
     expect(res.headers.get('Accept-Ranges')).toBe('bytes')
   })
 
-  it('falls back to full-object cache when range response is empty', async () => {
+  it('falls back to full-object cache when range response body is empty', async () => {
     const id = new ObjectId()
     const recording = { _id: id, s3Key: 'cache-test.webm' }
     mockGetDb.mockResolvedValueOnce({
@@ -81,22 +76,11 @@ describe('GET /api/stream/[id]', () => {
       }),
     })
     mockSend.mockResolvedValueOnce({ ContentLength: 2048 })
-
-    const emptyBuf = new Uint8Array(0)
+    // Range request returns empty body
+    mockSend.mockResolvedValueOnce({ Body: makeBody(new Uint8Array(0)) })
+    // Full object GET
     const fullBuf = new Uint8Array(512).fill(0xcd)
-
-    mockFetch
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 206,
-        arrayBuffer: vi.fn().mockResolvedValue(emptyBuf.buffer),
-        headers: { get: vi.fn().mockReturnValue(null) },
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        arrayBuffer: vi.fn().mockResolvedValue(fullBuf.buffer),
-        headers: { get: vi.fn().mockReturnValue(null) },
-      })
+    mockSend.mockResolvedValueOnce({ Body: makeBody(fullBuf) })
 
     const { GET } = await import('./route')
     const req = new NextRequest(`http://localhost/api/stream/${id}`, {
