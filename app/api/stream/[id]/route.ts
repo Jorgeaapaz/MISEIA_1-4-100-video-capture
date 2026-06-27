@@ -83,7 +83,13 @@ export async function GET(
     step = 'response'
     const actualEnd = start + bytes.byteLength - 1
 
-    return new Response(bytes, {
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(bytes)
+        controller.close()
+      },
+    })
+    return new Response(stream, {
       status: 206,
       headers: {
         'Content-Type': 'video/webm',
