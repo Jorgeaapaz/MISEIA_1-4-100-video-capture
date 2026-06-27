@@ -13,9 +13,19 @@ const MAX_CHUNK = 512 * 1024
 
 const videoCache = new Map<string, Uint8Array>()
 
+type S3Body = {
+  transformToByteArray?: () => Promise<Uint8Array>
+} & AsyncIterable<Uint8Array>
+
 async function toBuffer(body: unknown): Promise<Buffer> {
+  const b = body as S3Body
+  // AWS SDK v3 SdkStreamMixin provides transformToByteArray — prefer it over
+  // manual async iteration which can fail on certain Node.js stream modes.
+  if (typeof b.transformToByteArray === 'function') {
+    return Buffer.from(await b.transformToByteArray())
+  }
   const chunks: Buffer[] = []
-  for await (const chunk of body as AsyncIterable<Uint8Array>) {
+  for await (const chunk of b) {
     chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
   }
   return Buffer.concat(chunks)
@@ -25,6 +35,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  let s3Key = '(unknown)'
   try {
     const { id } = await params
 
@@ -37,7 +48,7 @@ export async function GET(
       return new Response('Recording not found', { status: 404 })
     }
 
-    const s3Key = recording.s3Key as string
+    s3Key = recording.s3Key as string
 
     const headResult = await getS3Client().send(
       new HeadObjectCommand({ Bucket: bucket, Key: s3Key })
@@ -79,7 +90,8 @@ export async function GET(
             if (m) totalSize = Number(m[1])
           }
         }
-      } catch {
+      } catch (rangeErr) {
+        console.warn('[stream] range GET failed, falling back to full object:', s3Key, rangeErr instanceof Error ? rangeErr.message : rangeErr)
         raw = null
       }
 
@@ -109,7 +121,7 @@ export async function GET(
       },
     })
   } catch (error) {
-    console.error('Stream error:', error)
+    console.error('[stream] fatal error for key:', s3Key, error instanceof Error ? error.message : error)
     return new Response('Stream error', { status: 500 })
   }
 }
