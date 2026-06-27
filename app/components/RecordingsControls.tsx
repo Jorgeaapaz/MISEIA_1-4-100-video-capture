@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
-import { useCallback, useTransition } from 'react'
+import { useCallback, useRef, useTransition } from 'react'
 
 interface Pagination {
   total: number
@@ -27,6 +27,7 @@ export default function RecordingsControls({
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const [isPending, startTransition] = useTransition()
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const updateParams = useCallback(
     (updates: Record<string, string>) => {
@@ -45,11 +46,9 @@ export default function RecordingsControls({
     [router, pathname, searchParams]
   )
 
-  let searchTimeout: ReturnType<typeof setTimeout>
-
   function handleSearch(value: string) {
-    clearTimeout(searchTimeout)
-    searchTimeout = setTimeout(() => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+    searchTimerRef.current = setTimeout(() => {
       updateParams({ search: value, page: '1' })
     }, 300)
   }
