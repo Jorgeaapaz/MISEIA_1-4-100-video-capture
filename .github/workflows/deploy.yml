@@ -1,0 +1,54 @@
+name: CI/CD — Build, Test, Deploy
+
+on:
+  push:
+    branches: [master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run lint
+      - run: NODE_ENV=production npm run build
+      - run: npm test
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy to GCI VM
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd ~/MISEIA1-4-100_video-capture || git clone https://github.com/Jorgeaapaz/MISEIA_1-4-100-video-capture.git ~/MISEIA1-4-100_video-capture && cd ~/MISEIA1-4-100_video-capture
+            git pull origin master
+            docker build -t video-capture:latest .
+            docker stop video-capture 2>/dev/null || true
+            docker rm video-capture 2>/dev/null || true
+            docker run -d \
+              --name video-capture \
+              --network miseia-net \
+              --restart unless-stopped \
+              -e MONGODB_URI="${{ secrets.MONGODB_URI }}" \
+              -e MONGODB_DB="${{ secrets.MONGODB_DB }}" \
+              -e RUSTFS_ENDPOINT="${{ secrets.RUSTFS_ENDPOINT }}" \
+              -e RUSTFS_ACCESS_KEY="${{ secrets.RUSTFS_ACCESS_KEY }}" \
+              -e RUSTFS_SECRET_KEY="${{ secrets.RUSTFS_SECRET_KEY }}" \
+              -e RUSTFS_BUCKET="${{ secrets.RUSTFS_BUCKET }}" \
+              --label "traefik.enable=true" \
+              --label "traefik.http.routers.video-capture.rule=Host(\`video-capture.deviaaps.com\`)" \
+              --label "traefik.http.routers.video-capture.entrypoints=websecure" \
+              --label "traefik.http.routers.video-capture.tls=true" \
+              --label "traefik.http.routers.video-capture.tls.certresolver=cloudflare" \
+              --label "traefik.http.services.video-capture-svc.loadbalancer.server.port=3000" \
+              video-capture:latest

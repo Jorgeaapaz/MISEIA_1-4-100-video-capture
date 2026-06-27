@@ -1,0 +1,38 @@
+stages:
+  - install
+  - lint
+  - test
+  - build
+
+variables:
+  NODE_VERSION: "20"
+
+default:
+  image: node:20-alpine
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}
+    paths:
+      - node_modules/
+
+install:
+  stage: install
+  script:
+    - npm ci
+
+lint:
+  stage: lint
+  needs: [install]
+  script:
+    - npm run lint
+
+test:
+  stage: test
+  needs: [install]
+  script:
+    - npm test
+
+build:
+  stage: build
+  needs: [lint, test]
+  script:
+    - NODE_ENV=production npm run build

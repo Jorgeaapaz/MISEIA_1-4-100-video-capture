@@ -1,0 +1,13 @@
+.next
+node_modules
+.git
+.gitignore
+.env*
+!.env.example
+coverage
+docs
+*.test.ts
+*.spec.ts
+vitest.config.ts
+README.md
+.gitlab-ci.yml
