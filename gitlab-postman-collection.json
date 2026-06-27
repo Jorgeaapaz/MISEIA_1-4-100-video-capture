@@ -1,0 +1,377 @@
+{
+  "info": {
+    "name": "GitLab API — jorgeaapaz",
+    "description": "GitLab REST API v4 for gitlab.codecrypto.academy. Set the `privateToken` variable before running.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "apikey",
+    "apikey": [
+      { "key": "key",   "value": "PRIVATE-TOKEN", "type": "string" },
+      { "key": "value", "value": "{{privateToken}}", "type": "string" },
+      { "key": "in",    "value": "header", "type": "string" }
+    ]
+  },
+  "variable": [
+    { "key": "baseUrl",      "value": "https://gitlab.codecrypto.academy/api/v4", "type": "string" },
+    { "key": "privateToken", "value": "",     "type": "secret" },
+    { "key": "username",     "value": "jorgeaapaz", "type": "string" },
+    { "key": "projectId",    "value": "482",  "type": "string" },
+    { "key": "mrIid",        "value": "1",    "type": "string" },
+    { "key": "issueIid",     "value": "1",    "type": "string" },
+    { "key": "pipelineId",   "value": "1",    "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "User",
+      "item": [
+        {
+          "name": "Get current user",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/user",
+              "host": ["{{baseUrl}}"],
+              "path": ["user"]
+            }
+          }
+        },
+        {
+          "name": "Get user by username",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/users?username={{username}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["users"],
+              "query": [{ "key": "username", "value": "{{username}}" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Projects",
+      "item": [
+        {
+          "name": "List owned projects",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/projects?owned=true&per_page=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects"],
+              "query": [
+                { "key": "owned",    "value": "true" },
+                { "key": "per_page", "value": "50" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get project by ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}"]
+            }
+          }
+        },
+        {
+          "name": "Create project",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"my-new-project\",\n  \"visibility\": \"public\",\n  \"initialize_with_readme\": true\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/projects",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects"]
+            }
+          }
+        },
+        {
+          "name": "Update project visibility",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"visibility\": \"public\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete project",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}"]
+            }
+          }
+        },
+        {
+          "name": "List project members",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/members",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}", "members"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Merge Requests",
+      "item": [
+        {
+          "name": "List MRs (project)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/merge_requests?state=opened",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}", "merge_requests"],
+              "query": [{ "key": "state", "value": "opened" }]
+            }
+          }
+        },
+        {
+          "name": "Get MR by IID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/merge_requests/{{mrIid}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}", "merge_requests", "{{mrIid}}"]
+            }
+          }
+        },
+        {
+          "name": "Create MR",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"source_branch\": \"feature-branch\",\n  \"target_branch\": \"main\",\n  \"title\": \"My merge request\",\n  \"description\": \"Closes #1\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/merge_requests",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}", "merge_requests"]
+            }
+          }
+        },
+        {
+          "name": "Accept (merge) MR",
+          "request": {
+            "method": "PUT",
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/merge_requests/{{mrIid}}/merge",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}", "merge_requests", "{{mrIid}}", "merge"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Issues",
+      "item": [
+        {
+          "name": "List issues (project)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/issues?state=opened",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}", "issues"],
+              "query": [{ "key": "state", "value": "opened" }]
+            }
+          }
+        },
+        {
+          "name": "Get issue by IID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/issues/{{issueIid}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}", "issues", "{{issueIid}}"]
+            }
+          }
+        },
+        {
+          "name": "Create issue",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Bug: something is broken\",\n  \"description\": \"Steps to reproduce...\",\n  \"labels\": \"bug\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/issues",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}", "issues"]
+            }
+          }
+        },
+        {
+          "name": "Close issue",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"state_event\": \"close\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/issues/{{issueIid}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}", "issues", "{{issueIid}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Pipelines & CI",
+      "item": [
+        {
+          "name": "List pipelines",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/pipelines?per_page=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}", "pipelines"],
+              "query": [{ "key": "per_page", "value": "20" }]
+            }
+          }
+        },
+        {
+          "name": "Get pipeline",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/pipelines/{{pipelineId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}", "pipelines", "{{pipelineId}}"]
+            }
+          }
+        },
+        {
+          "name": "Trigger pipeline",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ref\": \"main\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/pipeline",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}", "pipeline"]
+            }
+          }
+        },
+        {
+          "name": "Retry pipeline",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/pipelines/{{pipelineId}}/retry",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}", "pipelines", "{{pipelineId}}", "retry"]
+            }
+          }
+        },
+        {
+          "name": "Cancel pipeline",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/pipelines/{{pipelineId}}/cancel",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}", "pipelines", "{{pipelineId}}", "cancel"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Repository",
+      "item": [
+        {
+          "name": "List branches",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/repository/branches",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}", "repository", "branches"]
+            }
+          }
+        },
+        {
+          "name": "List commits",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/repository/commits?per_page=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}", "repository", "commits"],
+              "query": [{ "key": "per_page", "value": "20" }]
+            }
+          }
+        },
+        {
+          "name": "List tags",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/repository/tags",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}", "repository", "tags"]
+            }
+          }
+        },
+        {
+          "name": "Get file content",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{projectId}}/repository/files/README.md?ref=main",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{projectId}}", "repository", "files", "README.md"],
+              "query": [{ "key": "ref", "value": "main" }]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

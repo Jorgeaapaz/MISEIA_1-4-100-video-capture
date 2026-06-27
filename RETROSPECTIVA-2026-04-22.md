@@ -271,3 +271,242 @@ export const s3 = new S3Client({
 - **RustFS + Range requests:** el boundary interno varía por fichero; usar detección dinámica con fallback a descarga completa y caché en memoria
 - **Next.js dev hot-reload:** los cambios en API routes a veces no se aplican sin reiniciar el servidor (`Ctrl+C` + `npm run dev`)
 - **`transformToWebStream()`:** evitar para respuestas donde RustFS puede cerrar el stream — mejor buffering completo en memoria para ficheros pequeños/medianos
+
+---
+
+# Retrospectiva de Sesión — 2026-06-27
+### Screen Capture App — README Completo + Retrospectiva de Sesión
+
+## Overview
+
+Documentation-focused session. The goal was to produce a comprehensive, bilingual `README.md` in Spanish covering all twelve required sections (features, project structure, design patterns, requirements, specifications, ADRs, BDD criteria, tests, deployment, and AI-assisted changes), followed by appending this session retrospective in English. No code was changed; all work was documentation generation.
+
+**Result:** Successful. `README.md` fully rewritten (~650 lines). Retrospective appended to this file.
+
+---
+
+## Session Context
+
+This session followed a fully-implemented codebase. The app was already working end-to-end:
+
+- Next.js 16.2.4 (App Router, TypeScript, React 19)
+- Rustfs streaming proxy (`/api/stream/[id]`) with Range support and in-memory cache
+- MongoDB singleton with HMR-safe global cache
+- Vitest test suite with 91.45% line coverage across all API routes and lib files
+- Docker multi-stage build (`Dockerfile`) present and functional
+- Existing ADRs in `docs/decisions/`
+
+---
+
+## Files Modified
+
+```
+README.md     Full rewrite — comprehensive documentation in Spanish (all 12 sections)
+RETROSPECTIVA-2026-04-22.md    This entry appended
+```
+
+---
+
+## README.md Structure Produced
+
+| Section | Content |
+|---|---|
+| 1. Funcionalidades Implementadas | MediaRecorder capture, Rustfs S3 upload, streaming proxy, MongoDB persistence, recordings gallery |
+| 2. Estructura del Proyecto | Annotated file tree of all relevant paths |
+| 3. Patrones de Diseño | Singleton, Proxy, State Machine, Repository, Lockfile note |
+| 4. Cómo Funciona | 3-step flow (capture → upload → proxy playback) with TypeScript code snippet |
+| 5. Primeros Pasos | Prerequisites table, clone, `.env.local` setup, `npm ci`, dev/prod commands |
+| 6. Salida de Ejemplo | 5 representative HTTP exchanges (success, Range response, 404, permission error, gallery JSON) |
+| 7. Requisitos | 12 FR, 11 NFR, 3 REG-MX, 6 OPS, 5 Quality Attributes (IEEE830 + quantified NFRs) |
+| 7.6 BDD | 5 Gherkin scenarios covering full recording flow, permission denial, playback, filter, auto-bucket |
+| 8. Especificaciones | Functional Spec, Structural Spec, Behavioral Spec (Mermaid state diagram), Operative Spec |
+| 8.2 Invariants | 3 formal contracts (ensureBucket, stream proxy, POST recordings) with pre/post/invariants/examples |
+| 8.3 ADRs | 5 ADRs with context/options/decision/consequences/benchmark data |
+| 9. Pruebas | Coverage table from `coverage-summary.json` (91.45% lines, 100% functions), test commands |
+| 10. Despliegue | Docker single container, Docker Compose full stack, Vercel option; `package-lock.json` note |
+| 11. Mejoras | 9 implemented extras + 6 future suggestions |
+| 12. Cambios IA | 4 documented AI-assisted changes with explicit critical evaluation |
+
+---
+
+## Key Content Decisions
+
+### Language
+README written entirely in Spanish as required. This retrospective written in English as required.
+
+### `package-lock.json` Mention
+Explicitly called out in Section 3.5 (Lockfile as design pattern) and Section 10.2 with the note to always use `npm ci` over `npm install` in CI/CD environments. The lockfile ensures reproducible installs across all environments.
+
+### Coverage Numbers Sourced from Actual Report
+All coverage percentages in Section 9 were pulled directly from `coverage/coverage-summary.json` — not estimated:
+
+| File | Lines | Functions | Branches |
+|---|---|---|---|
+| recordings/route.ts | 100% | 100% | 96% |
+| upload/route.ts | 100% | 100% | 100% |
+| stream/route.ts | 86.79% | 100% | 57.14% |
+| lib/s3.ts | 100% | 100% | 100% |
+| lib/mongodb.ts | 66.66% | 100% | 25% |
+| **Total** | **91.45%** | **100%** | **72.88%** |
+
+### ADR Benchmark Data
+ADR-001 (streaming proxy) cites the specific benchmark: 100% failure rate with direct presigned URLs vs. 0% errors with the proxy over 50 test runs. ADR-003 (keepAlive: false) cites ~30% ECONNRESET rate with default settings.
+
+### Mexican Regulatory Requirements
+Three regulations identified as applicable:
+- **LFPDPPP** (personal data protection law, 2010) — screen recordings may capture third-party personal data
+- **NOM-151-SCFI-2016** — digital document integrity requirements (recommends SHA-256 hash in MongoDB)
+- **MAAGTICSI** — government data sovereignty rules for federal agencies
+
+---
+
+## Commands Run This Session
+
+```bash
+# File discovery
+find D:/Master-IA-Dev/04-Bloque4/1-4-100-video-capture/video-capture -type f \
+  | grep -v node_modules | grep -v .next | grep -v .git | sort
+
+# Read package.json for exact dependency versions and scripts
+cat package.json
+
+# Read coverage report for accurate test metrics
+cat coverage/coverage-summary.json
+
+# Read key source files for ADR justification and code snippets
+# (app/api/stream/[id]/route.ts, lib/s3.ts, app/components/ScreenRecorder.tsx, Dockerfile)
+```
+
+---
+
+## Running & Stopping the Application
+
+### Prerequisites
+- MongoDB running on `localhost:27017`
+- Rustfs running on `localhost:10000` (credentials: `minioadmin` / `minioadmin1234`)
+
+### Start (development)
+```bash
+cd D:/Master-IA-Dev/04-Bloque4/1-4-100-video-capture/video-capture
+npm run dev
+# → http://localhost:3000
+```
+
+### Start (production via Docker)
+```bash
+docker build -t video-capture:latest .
+docker run -p 3000:3000 \
+  -e MONGODB_URI=mongodb://host.docker.internal:27017 \
+  -e MONGODB_DB=screen-capture \
+  -e RUSTFS_ENDPOINT=http://host.docker.internal:10000 \
+  -e RUSTFS_ACCESS_KEY=minioadmin \
+  -e RUSTFS_SECRET_KEY=minioadmin1234 \
+  -e RUSTFS_BUCKET=recordings \
+  video-capture:latest
+```
+
+### Run tests with coverage
+```bash
+npm run test:coverage
+# Report: coverage/index.html
+```
+
+### Stop
+`Ctrl+C` in the terminal running `npm run dev` or `npm start`.
+
+---
+
+## Network Configuration
+
+This application runs entirely on localhost. No VirtualBox NAT or port-forwarding rules are required. All services communicate via `localhost`:
+
+- Next.js: `localhost:3000`
+- Rustfs: `localhost:10000` (S3 API), `localhost:10001` (Rustfs Console)
+- MongoDB: `localhost:27017`
+
+No `/etc/hosts` or `C:\Windows\System32\drivers\etc\hosts` modifications are needed for local development.
+
+---
+
+## Test URLs
+
+| URL | Description |
+|---|---|
+| `http://localhost:3000/` | Main page — screen recorder UI |
+| `http://localhost:3000/recordings` | Recordings gallery |
+| `http://localhost:3000/api/recordings` | GET: list all recordings (JSON) |
+| `http://localhost:3000/api/stream/{id}` | GET: video proxy with Range support |
+| `http://localhost:3000/api/upload` | POST: upload video (multipart/form-data) |
+| `http://localhost:10000` | Rustfs S3-compatible storage |
+| `http://localhost:10001` | Rustfs web console |
+
+### Curl — list recordings
+```bash
+curl http://localhost:3000/api/recordings
+```
+
+### Curl — save recording metadata
+```bash
+curl -X POST http://localhost:3000/api/recordings \
+  -H "Content-Type: application/json" \
+  -d '{"description": "Test 2026-06-27", "s3Key": "test-key.webm"}'
+```
+
+### Curl — stream test (Range request)
+```bash
+curl -v -H "Range: bytes=0-524287" \
+  http://localhost:3000/api/stream/<mongodb-id>
+# Expect: HTTP 206, Content-Range: bytes 0-524287/<total>
+```
+
+---
+
+## Problems & Solutions
+
+| Problem | Solution |
+|---|---|
+| `README.md` had existing content that needed full replacement | Read file first (required by tooling) then used Write tool to overwrite completely |
+| Coverage numbers needed to be accurate, not estimated | Read `coverage/coverage-summary.json` directly for exact percentages |
+| Mexican regulatory requirements were not obvious from the codebase | Applied LFPDPPP, NOM-151-SCFI-2016, and MAAGTICSI based on data handling characteristics of the app |
+| ADRs needed quantitative justification per project instructions | Pulled specific benchmark numbers from prior debugging sessions documented in this file |
+
+---
+
+## Process: How the README Was Built
+
+1. **Discovery phase (parallel):** `find` for file tree + `cat package.json` simultaneously
+2. **Coverage data:** read `coverage/coverage-summary.json` for exact numbers
+3. **Source reading (parallel):** `stream/route.ts`, `lib/s3.ts`, `ScreenRecorder.tsx`, `Dockerfile` simultaneously
+4. **Memory check:** read `project_screen_capture.md` memory file for architectural summary
+5. **Write:** single `Write` call producing the full ~650-line README
+
+Total tool calls for README: ~8 (mostly parallel reads, one write).
+
+---
+
+## Instructions Followed This Session
+
+The user requested:
+1. Re-create `README.md` using the `repo_readme` skill — **Done**
+2. README written in **Spanish** — **Done**
+3. Mention `package-lock.json` in the README — **Done** (Sections 3.5 and 10.2)
+4. Re-create a retrospective of the session in **English** — **Done** (this entry)
+5. Include session content, processes, instructions, and recommendations — **Done** (this entry)
+
+---
+
+## Recommendations for Future Sessions
+
+1. **Add `bodySizeLimit` to `/api/upload`:** Next.js defaults to 4 MB body limit. Long recordings will fail silently. Add `export const config = { api: { bodySizeLimit: '500mb' } }` or equivalent App Router config.
+
+2. **Add input validation to `POST /api/recordings`:** Currently `s3Key` is not validated — a missing or empty `s3Key` still inserts a broken document in MongoDB. Add a simple guard before `insertOne`.
+
+3. **MongoDB index on `createdAt`:** The gallery query sorts by `createdAt: -1` on every page load without an index. Add `db.recordings.createIndex({ createdAt: -1 })` for collections > 1000 documents.
+
+4. **In-process video cache eviction:** The `Map<string, Uint8Array>` cache in the stream proxy has no eviction policy. In long-running production instances, it will grow unbounded. Add an LRU cache or TTL eviction (e.g., max 50 entries, evict oldest on overflow).
+
+5. **Delete recording endpoint:** There is no `DELETE /api/recordings/:id`. Adding it requires both `db.deleteOne({ _id: ObjectId(id) })` and `DeleteObjectCommand` on Rustfs — both must succeed or be rolled back manually (no transaction available across MongoDB + S3).
+
+6. **CI/CD pipeline:** No `.github/workflows/` exists. Add a minimal workflow: `npm ci → npm run lint → npm test → npm run build` on every push. This would catch regressions before merge.
+
+7. **SHA-256 hash for NOM-151 compliance:** If the app is used in any official or regulated context in Mexico, add a `sha256` field to the MongoDB recording document computed from the WebM file bytes before upload. This satisfies NOM-151-SCFI-2016's integrity requirement.
